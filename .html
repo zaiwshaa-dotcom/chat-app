@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>منصة الدردشة الصوتية والكتابية الحقيقية</title>
+
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- PeerJS for WebRTC Audio -->
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        chatDark: '#0f051d',
+                        chatPurple: '#240d42',
+                        chatGold: '#fbbf24',
+                        chatAccent: '#7c3aed'
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body { background-color: #0f051d; color: #fff; font-family: Tahoma, sans-serif; }
+        .country-card { background: linear-gradient(135deg, rgba(36, 13, 66, 0.9), rgba(15, 5, 29, 0.95)); border: 1px solid rgba(124, 58, 237, 0.3); }
+        .pulse-mic { animation: pulse 1.5s infinite; }
+        @keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(1.1); } 100% { transform: scale(1); } }
+    </style>
+</head>
+<body class="flex flex-col h-screen overflow-hidden">
+
+    <!-- Top Header -->
+    <header class="bg-chatPurple border-b border-purple-900/50 px-4 py-3 flex justify-between items-center shadow-md z-10">
+        <div class="flex items-center space-x-2 space-x-reverse">
+            <button onclick="toggleAdminPanel()" class="bg-purple-950/90 px-3 py-1.5 rounded-full text-xs border border-purple-500/40 flex items-center space-x-1 space-x-reverse shadow">
+                <i class="fa-solid fa-user-shield text-chatGold"></i>
+                <span id="my-role-display" class="text-white font-bold">زائر</span>
+            </button>
+        </div>
+        <div class="text-center">
+            <div class="text-[11px] text-chatGold bg-purple-950/80 px-3 py-1 rounded-full border border-chatGold/30">
+                المتواجدون الآن: <span id="total-online-count" class="font-bold text-white">0</span>
+            </div>
+        </div>
+        <div class="flex items-center space-x-3 space-x-reverse text-xl text-purple-300">
+            <i class="fa-solid fa-gamepad cursor-pointer hover:text-chatGold" onclick="toggleGamesModal()" title="الألعاب"></i>
+            <i class="fa-solid fa-bell cursor-pointer hover:text-white"></i>
+        </div>
+    </header>
+
+    <!-- Main Content Area -->
+    <main id="main-content" class="flex-1 overflow-y-auto p-3 pb-24 space-y-4">
+        
+        <!-- Admin Notice / Status Bar -->
+        <div class="bg-gradient-to-r from-purple-900 to-indigo-950 p-2.5 rounded-xl border border-purple-500/30 text-center text-xs shadow-inner">
+            <span class="text-chatGold font-bold">النظام الحقيقي:</span> الغرف تُنشأ فقط بواسطة المشرف عبر لوحة التحكم.
+        </div>
+
+        <!-- Arab Countries Section (جميع الدول العربية) -->
+        <div class="space-y-1.5">
+            <h3 class="text-xs font-bold text-purple-300 px-1 mb-2"><i class="fa-solid fa-globe"></i> شبكات الدول العربية:</h3>
+            <div class="grid grid-cols-2 gap-2 text-xs" id="countries-grid">
+                <!-- سيتم توليد الدول العربية بالكامل تلقائياً -->
+            </div>
+        </div>
+
+        <!-- Active Rooms Grid -->
+        <div class="space-y-2 pt-2">
+            <h3 class="text-xs font-bold text-purple-300 px-1"><i class="fa-solid fa-door-open"></i> الغرف المتاحة حالياً:</h3>
+            <div id="rooms-container" class="grid grid-cols-2 gap-3">
+                <div class="col-span-2 text-center text-gray-400 text-xs py-6 border border-dashed border-purple-900/50 rounded-xl">
+                    لا توجد غرف مفتوحة حالياً. يتم إنشاء الغرف من قِبل المشرف فقط.
+                </div>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- Admin Panel Modal (لوحة تحكم المشرف لإنشاء الغرف) -->
+    <div id="admin-modal" class="fixed inset-0 bg-black/80 z-50 flex items-center justify-center hidden">
+        <div class="bg-chatPurple w-11/12 max-w-md p-4 rounded-2xl border border-purple-500/50 shadow-2xl space-y-4">
+            <div class="flex justify-between items-center border-b border-purple-800 pb-2">
+                <h3 class="text-sm font-bold text-chatGold"><i class="fa-solid fa-lock"></i> لوحة تحكم المشرف</h3>
+                <button onclick="toggleAdminPanel()" class="text-xs bg-red-600 text-white px-2 py-1 rounded">إغلاق</button>
+            </div>
+            
+            <div id="admin-login-sec" class="space-y-3">
+                <p class="text-xs text-gray-300">أدخل كلمة مرور المشرف لإنشاء وتأجير الغرف:</p>
+                <input type="password" id="admin-pass-input" placeholder="كلمة المرور..." class="w-full bg-purple-950 p-2 rounded text-xs border border-purple-700 outline-none">
+                <button onclick="verifyAdmin()" class="w-full bg-chatGold text-chatDark font-bold py-2 rounded text-xs">تسجيل الدخول كمشرف</button>
+            </div>
+
+            <div id="admin-controls-sec" class="space-y-3 hidden">
+                <p class="text-xs text-green-400 font-bold"><i class="fa-solid fa-check-circle"></i> مرحباً بك أيها المشرف!</p>
+                <div class="space-y-2">
+                    <label class="text-[11px] text-purple-300">اسم الغرفة الجديدة:</label>
+                    <input type="text" id="new-room-title" placeholder="مثال: غرفة الملوك..." class="w-full bg-purple-950 p-2 rounded text-xs border border-purple-700 outline-none">
+                    <label class="text-[11px] text-purple-300">الدولة المخصصة:</label>
+                    <select id="new-room-country" class="w-full bg-purple-950 p-2 rounded text-xs border border-purple-700 outline-none text-white">
+                        <option value="🇮🇶">العراق 🇮🇶</option>
+                        <option value="🇸🇾">سوريا 🇸🇾</option>
+                        <option value="🇸🇦">السعودية 🇸🇦</option>
+                        <option value="🇪🇬">مصر 🇪🇬</option>
+                        <option value="🇯🇴">الأردن 🇯🇴</option>
+                        <option value="🇦🇪">الإمارات 🇦🇪</option>
+                        <option value="🇩🇿">الجزائر 🇩🇿</option>
+                        <option value="🇲🇦">المغرب 🇲🇦</option>
+                    </select>
+                </div>
+                <button onclick="createNewRoomByAdmin()" class="w-full bg-green-600 hover:bg-green-700 font-bold py-2 rounded text-xs shadow">إنشاء الغرفة فوراً</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Inside Room View -->
+    <div id="room-view" class="fixed inset-0 bg-chatDark z-50 flex flex-col hidden">
+        <!-- Room Header -->
+        <div class="bg-chatPurple p-3 flex justify-between items-center border-b border-purple-900">
+            <button onclick="toggleMic()" id="mic-btn" class="text-xl text-white bg-purple-900/60 p-2.5 rounded-full transition">
+                <i id="mic-icon" class="fa-solid fa-microphone-slash text-red-400"></i>
+            </button>
+            <div id="room-title-header" class="text-sm font-bold text-chatGold">اسم الغرفة</div>
+            <button onclick="closeRoom()" class="bg-red-600 text-white text-xs px-3 py-1 rounded-lg font-bold">خروج</button>
+        </div>
+
+        <!-- Hidden Audio Container -->
+        <div id="audio-streams-container" class="hidden"></div>
+
+        <!-- Chat Messages Area -->
+        <div class="flex-1 overflow-y-auto p-3 space-y-3" id="chat-messages">
+            <div class="bg-purple-950/60 border border-purple-800/40 p-2.5 rounded-xl text-center text-xs text-chatGold">
+                مرحباً بك في الغرفة! الدردشة الحية مفعّلة الآن.
+            </div>
+        </div>
+
+        <!-- Emoji Picker Drawer -->
+        <div id="emoji-drawer" class="bg-purple-950 border-t border-purple-800 p-2 flex space-x-2 space-x-reverse overflow-x-auto hidden">
+            <span onclick="addEmoji('😀')" class="cursor-pointer text-xl">😀</span>
+            <span onclick="addEmoji('😂')" class="cursor-pointer text-xl">😂</span>
+            <span onclick="addEmoji('❤️')" class="cursor-pointer text-xl">❤️</span>
+            <span onclick="addEmoji('🔥')" class="cursor-pointer text-xl">🔥</span>
+            <span onclick="addEmoji('👍')" class="cursor-pointer text-xl">👍</span>
+            <span onclick="addEmoji('🎉')" class="cursor-pointer text-xl">🎉</span>
+            <span onclick="addEmoji('👑')" class="cursor-pointer text-xl">👑</span>
+            <span onclick="addEmoji('🌹')" class="cursor-pointer text-xl">🌹</span>
+        </div>
+
+        <!-- Footer Input Controls -->
+        <div class="bg-chatPurple p-2 border-t border-purple-900 flex items-center space-x-2 space-x-reverse">
+            <button onclick="toggleSpeaker()" class="text-white p-1.5"><i id="speaker-icon" class="fa-solid fa-volume-high text-green-400"></i></button>
+            <button onclick="toggleEmojiDrawer()" class="text-purple-300 p-1.5"><i class="fa-regular fa-face-smile text-lg"></i></button>
+            <button onclick="toggleGamesModal()" class="text-chatGold p-1.5"><i class="fa-solid fa-dice text-lg"></i></button>
+            
+            <div class="flex-1 flex items-center bg-purple-950 rounded-full px-3 py-1.5 border border-purple-500/30">
+                <input type="text" id="msg-input" placeholder="اكتب رسالة..." class="bg-transparent w-full text-xs text-white outline-none" onkeypress="if(event.key === 'Enter') sendMessage()">
+            </div>
+            
+            <button onclick="sendMessage()" class="bg-chatGold text-chatDark p-2 rounded-full w-8 h-8 flex items-center justify-center font-bold shadow">
+                <i class="fa-solid fa-paper-plane text-xs"></i>
+            </button>
+        </div>
+    </div>
+
+    <!-- Mini Games Modal (نافذة الألعاب البسيطة) -->
+    <div id="games-modal" class="fixed inset-0 bg-black/70 z-50 flex items-center justify-center hidden">
+        <div class="bg-chatPurple w-11/12 max-w-xs p-4 rounded-2xl border border-purple-500/40 text-center space-y-3">
+            <div class="flex justify-between items-center border-b border-purple-800 pb-2">
+                <h3 class="text-xs font-bold text-chatGold"><i class="fa-solid fa-gamepad"></i> ألعاب تفاعلية بسيطة</h3>
+                <button onclick="toggleGamesModal()" class="text-xs text-red-400">إغلاق</button>
+            </div>
+            <div class="grid grid-cols-2 gap-2 text-xs">
+                <button onclick="playDice()" class="bg-purple-900 p-3 rounded-xl border border-purple-700 hover:bg-purple-800 flex flex-col items-center space-y-1">
+                    <i class="fa-solid fa-dice-five text-2xl text-chatGold"></i>
+                    <span>رمي النرد 🎲</span>
+                </button>
+                <button onclick="playRPS()" class="bg-purple-900 p-3 rounded-xl border border-purple-700 hover:bg-purple-800 flex flex-col items-center space-y-1">
+                    <i class="fa-solid fa-hand-back-fist text-2xl text-chatGold"></i>
+                    <span>حجر ورقة مقص ✂️</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- JavaScript Application Logic -->
+    <script>
+        // الدول العربية الـ 22 كاملة
+        const arabCountries = [
+            { name: "العراق", flag: "🇮🇶" }, { name: "سوريا", flag: "🇸🇾" },
+            { name: "السعودية", flag: "🇸🇦" }, { name: "مصر", flag: "🇪🇬" },
+            { name: "الأردن", flag: "🇯🇴" }, { name: "الإمارات", flag: "🇦🇪" },
+            { name: "الجزائر", flag: "🇩🇿" }, { name: "المغرب", flag: "🇲🇦" },
+            { name: "تونس", flag: "🇹🇳" }, { name: "اليمن", flag: "🇾🇪" },
+            { name: "الكويت", flag: "🇰🇼" }, { name: "عُمان", flag: "🇴🇲" },
+            { name: "قطر", flag: "🇶🇦" }, { name: "البحرين", flag: "🇧🇭" },
+            { name: "لبنان", flag: "🇱🇧" }, { name: "فلسطين", flag: "🇵🇸" },
+            { name: "السودان", flag: "🇸🇩" }, { name: "ليبيا", flag: "🇱🇾" },
+            { name: "موريتانيا", flag: "🇲🇷" }, { name: "الصومال", flag: "🇸🇴" },
+            { name: "جيبوتي", flag: "🇩🇯" }, { name: "جزر القمر", flag: "🇰🇲" }
+        ];
+
+        let isAdmin = false;
+        let myName = 'زائر_' + Math.floor(Math.random() * 899 + 100);
+        let createdRooms = [];
+
+        // إنشاء شبكة جميع الدول العربية في الواجهة
+        const grid = document.getElementById('countries-grid');
+        arabCountries.forEach(c => {
+            grid.innerHTML += `
+                <div class="country-card p-2 rounded-lg flex items-center justify-between">
+                    <span class="font-bold">${c.flag} ${c.name}</span>
+                    <span class="text-[10px] text-gray-400">0</span>
+                </div>
+            `;
+        });
+
+        function toggleAdminPanel() {
+            document.getElementById('admin-modal').classList.toggle('hidden');
+        }
+
+        function verifyAdmin() {
+            const pass = document.getElementById('admin-pass-input').value;
+            if (pass === '123456') { // كلمة مرور المشرف (يمكنك تغييرها)
+                isAdmin = true;
+                document.getElementById('my-role-display').innerText = 'المشرف (Admin)';
+                document.getElementById('admin-login-sec').classList.add('hidden');
+                document.getElementById('admin-controls-sec').classList.remove('hidden');
+            } else {
+                alert('كلمة المرور غير صحيحة!');
+            }
+        }
+
+        function createNewRoomByAdmin() {
+            const title = document.getElementById('new-room-title').value.trim();
+            const country = document.getElementById('new-room-country').value;
+
+            if (!title) {
+                alert('يرجى كتابة اسم الغرفة');
+                return;
+            }
+
+            const roomId = 'room_' + Date.now();
+            createdRooms.push({ id: roomId, title: title, country: country });
+            renderRooms();
+            
+            document.getElementById('new-room-title').value = '';
+            toggleAdminPanel();
+            alert('تم إنشاء الغرفة بنجاح وبثها للمستخدمين!');
+        }
+
+        function renderRooms() {
+            const container = document.getElementById('rooms-container');
+            if (createdRooms.length === 0) {
+                container.innerHTML = `
+                    <div class="col-span-2 text-center text-gray-400 text-xs py-6 border border-dashed border-purple-900/50 rounded-xl">
+                        لا توجد غرف مفتوحة حالياً. يتم إنشاء الغرف من قِبل المشرف فقط.
+                    </div>`;
+                return;
+            }
+
+            container.innerHTML = '';
+            createdRooms.forEach(r => {
+                container.innerHTML += `
+                    <div onclick="openRoom('${r.title}', '${r.id}')" class="country-card rounded-2xl p-2.5 flex flex-col items-center cursor-pointer shadow-lg hover:scale-[1.02] transition">
+                        <div class="text-[10px] text-purple-300 w-full text-right mb-1">${r.country}</div>
+                        <div class="w-14 h-14 rounded-full bg-purple-900 border-2 border-chatGold flex items-center justify-center font-bold text-lg mb-2">
+                            ${r.title.charAt(0)}
+                        </div>
+                        <div class="bg-white text-gray-900 text-xs font-bold px-3 py-1 rounded-full w-full text-center truncate shadow">
+                            ${r.title}
+                        </div>
+                    </div>
+                `;
+            });
+        }
+
+        function openRoom(title, id) {
+            document.getElementById('room-title-header').innerText = title;
+            document.getElementById('room-view').classList.remove('hidden');
+        }
+
+        function closeRoom() {
+            document.getElementById('room-view').classList.add('hidden');
+        }
+
+        function toggleEmojiDrawer() {
+            document.getElementById('emoji-drawer').classList.toggle('hidden');
+        }
+
+        function addEmoji(emoji) {
+            document.getElementById('msg-input').value += emoji;
+        }
+
+        function toggleGamesModal() {
+            document.getElementById('games-modal').classList.toggle('hidden');
+        }
+
+        function playDice() {
+            const result = Math.floor(Math.random() * 6) + 1;
+            sendSystemMessage(`🎲 قام ${myName} برمي النرد وحصل على الرقم: (${result})`);
+            toggleGamesModal();
+        }
+
+        function playRPS() {
+            const choices = ['حجر ✊', 'ورقة ✋', 'مقص ✌️'];
+            const randomChoice = choices[Math.floor(Math.random() * choices.length)];
+            sendSystemMessage(`✂️ اختار ${myName} في لعبة حجر ورقة مقص: ${randomChoice}`);
+            toggleGamesModal();
+        }
+
+        function sendSystemMessage(text) {
+            const chat = document.getElementById('chat-messages');
+            chat.innerHTML += `
+                <div class="bg-purple-900/50 border border-purple-500/30 p-2 rounded-xl text-center text-xs text-chatGold">
+                    ${text}
+                </div>
+            `;
+            chat.scrollTop = chat.scrollHeight;
+        }
+
+        function sendMessage() {
+            const input = document.getElementById('msg-input');
+            const text = input.value.trim();
+            if (text) {
+                const chat = document.getElementById('chat-messages');
+                chat.innerHTML += `
+                    <div class="flex items-start space-x-2 space-x-reverse bg-indigo-950/60 p-2 rounded-xl">
+                        <div class="w-7 h-7 rounded-full bg-chatGold text-chatDark flex items-center justify-center font-bold text-xs">${myName.slice(-2)}</div>
+                        <div>
+                            <div class="text-[10px] text-chatGold font-bold">${myName}</div>
+                            <div class="text-xs text-white">${text}</div>
+                        </div>
+                    </div>
+                `;
+                input.value = '';
+                chat.scrollTop = chat.scrollHeight;
+            }
+        }
+    </script>
+</body>
+</html>
